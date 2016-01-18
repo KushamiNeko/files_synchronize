@@ -8,12 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const (
 	syncPathFile string = `/home/onionhuang/programming_projects/golang/file_sync/sync_path.txt`
 	maxThreads   int    = 8
 )
+
+var wg sync.WaitGroup
 
 func main() {
 	fn, err := os.Open(syncPathFile)
@@ -27,31 +30,6 @@ func main() {
 	if err != nil {
 		log.Printf("reading error: %q\n", err)
 		return
-	}
-
-	// chanSource := make(chan string, maxThreads)
-	// chanDestination := make(chan string, maxThreads)
-	chanSource := make(chan [2]string, maxThreads)
-	// chanDestination := make(chan [2]string, maxThreads)
-	chanSourceDone := make(chan bool, maxThreads)
-	// chanDestinationDone := make(chan bool, maxThreads)
-	threadCounts := 0
-
-	for i := 0; i < maxThreads; i++ {
-		go func(source chan [2]string, done chan bool) {
-			for {
-				// sourcePath := <-source
-				// destinationPath := <-destination
-				source := <-source
-				sourcePath := source[0]
-				destinationPath := source[1]
-				// log.Printf("Source: %q\n", sourcePath)
-				// log.Printf("Destination: %q\n", destinationPath)
-				syncFileDistribution(sourcePath, destinationPath)
-				syncDestinationFile(destinationPath, sourcePath)
-				done <- true
-			}
-		}(chanSource, chanSourceDone)
 	}
 
 	pathClean := strings.Replace(contents, "{", "", -1)
@@ -75,31 +53,20 @@ func main() {
 				continue
 			}
 
-			// chanSource <- sourcePath
-			// chanDestination <- destinationPath
-			source := [2]string{sourcePath, destinationPath}
-			chanSource <- source
-			// chanDestination <- source
-			threadCounts++
-			// syncFileDistribution(sourcePath, destinationPath)
-			// syncDestinationFile(destinationPath, sourcePath)
-		}
+			wg.Add(1)
+			go func() {
+				syncFileDistribution(sourcePath, destinationPath)
+				wg.Done()
+			}()
 
-		if threadCounts > maxThreads {
-			<-chanSourceDone
-			// <-chanDestinationDone
-			threadCounts--
+			wg.Add(1)
+			go func() {
+				syncDestinationFile(destinationPath, sourcePath)
+				wg.Done()
+			}()
 		}
 	}
-
-	for i := 0; i < maxThreads; i++ {
-		<-chanSourceDone
-		// <-chanDestinationDone
-		threadCounts--
-		if threadCounts <= 0 {
-			return
-		}
-	}
+	wg.Wait()
 }
 
 func syncDestinationFile(desPath, srcPath string) {
@@ -130,9 +97,12 @@ func syncDestinationFile(desPath, srcPath string) {
 						filepath.Join(destinationPath, file.Name()))
 					os.RemoveAll(recursiveDesPath)
 				} else {
-					// recSource := [2]string{recursiveSrcPath, recursiveDesPath}
-					// cSource <- recSource
-					syncDestinationFile(recursiveDesPath, recursiveSrcPath)
+					wg.Add(1)
+					go func() {
+						syncDestinationFile(recursiveDesPath, recursiveSrcPath)
+						wg.Done()
+					}()
+					return
 				}
 			} else {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
@@ -175,9 +145,12 @@ func syncFileDistribution(srcPath, desPath string) {
 			if file.IsDir() {
 				recursiveSrcPath := filepath.Join(sourcePath, file.Name())
 				recursiveDesPath := filepath.Join(destinationPath, file.Name())
-				// recSource := [2]string{recursiveSrcPath, recursiveDesPath}
-				// cSource <- recSource
-				syncFileDistribution(recursiveSrcPath, recursiveDesPath)
+				wg.Add(1)
+				go func() {
+					syncFileDistribution(recursiveSrcPath, recursiveDesPath)
+					wg.Done()
+				}()
+
 			} else {
 				srcFile := filepath.Join(sourcePath, file.Name())
 				destFile := filepath.Join(destinationPath, file.Name())
