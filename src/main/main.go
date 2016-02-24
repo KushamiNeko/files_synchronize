@@ -59,6 +59,10 @@ func main() {
 				wg.Done()
 			}()
 
+			// sequential version
+			// syncFileDistribution(sourcePath, destinationPath)
+			// syncDestinationFile(destinationPath, sourcePath)
+
 			wg.Add(1)
 			go func() {
 				syncDestinationFile(destinationPath, sourcePath)
@@ -97,12 +101,15 @@ func syncDestinationFile(desPath, srcPath string) {
 						filepath.Join(destinationPath, file.Name()))
 					os.RemoveAll(recursiveDesPath)
 				} else {
+
+					// sequential version
+					// syncDestinationFile(recursiveDesPath, recursiveSrcPath)
+
 					wg.Add(1)
 					go func() {
 						syncDestinationFile(recursiveDesPath, recursiveSrcPath)
 						wg.Done()
 					}()
-					return
 				}
 			} else {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
@@ -145,6 +152,10 @@ func syncFileDistribution(srcPath, desPath string) {
 			if file.IsDir() {
 				recursiveSrcPath := filepath.Join(sourcePath, file.Name())
 				recursiveDesPath := filepath.Join(destinationPath, file.Name())
+
+				// sequential version
+				// syncFileDistribution(recursiveSrcPath, recursiveDesPath)
+
 				wg.Add(1)
 				go func() {
 					syncFileDistribution(recursiveSrcPath, recursiveDesPath)
