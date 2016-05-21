@@ -5,7 +5,5 @@
 /home/onionhuang/Documents:/run/media/onionhuang/Hitachi/my_documents_backup;
 /home/onionhuang/Documents:/run/media/onionhuang/FreeAgent GoFlex Drive/my_documents_backup;
 /home/onionhuang/Documents:/run/media/onionhuang/Internal_Disk/my_documents_backup;
-/run/media/onionhuang/Internal_Disk/tutorials_document:/run/media/onionhuang/FreeAgent GoFlex Drive/tutorials_documents_backup;
-/run/media/onionhuang/Internal_Disk/tutorials_document:/run/media/onionhuang/Hitachi/tutorials_documents_backup;
 }
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -19,6 +20,10 @@ const (
 var wg sync.WaitGroup
 
 func main() {
+
+	log.Println("Start file sync...")
+	startTime := time.Now()
+
 	fn, err := os.Open(syncPathFile)
 	if err != nil {
 		log.Fatalf("%q\n", "Cannot open the file!")
@@ -71,6 +76,12 @@ func main() {
 		}
 	}
 	wg.Wait()
+
+	endTime := time.Now()
+	processTime := endTime.Sub(startTime)
+
+	log.Println("File sync done!")
+	log.Printf("Processing time: %f seconds", processTime.Seconds())
 }
 
 func syncDestinationFile(desPath, srcPath string) {
@@ -97,8 +108,8 @@ func syncDestinationFile(desPath, srcPath string) {
 			recursiveDesPath := filepath.Join(destinationPath, file.Name())
 			if file.IsDir() {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
-					log.Printf("Directory does not exist in source: %q\n",
-						filepath.Join(destinationPath, file.Name()))
+					//	log.Printf("Directory does not exist in source: %q\n",
+					//		filepath.Join(destinationPath, file.Name()))
 					os.RemoveAll(recursiveDesPath)
 				} else {
 
@@ -113,8 +124,8 @@ func syncDestinationFile(desPath, srcPath string) {
 				}
 			} else {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
-					log.Printf("File does not exist in source: %q\n",
-						filepath.Join(destinationPath, file.Name()))
+					//	log.Printf("File does not exist in source: %q\n",
+					//		filepath.Join(destinationPath, file.Name()))
 					os.Remove(recursiveDesPath)
 				}
 			}
@@ -172,8 +183,8 @@ func syncFileDistribution(srcPath, desPath string) {
 }
 
 func copyFile(src, dst string) {
-	log.Printf("copy source: %q\n", src)
-	log.Printf("copy destination: %q\n", dst)
+	//	log.Printf("copy source: %q\n", src)
+	//	log.Printf("copy destination: %q\n", dst)
 
 	sourceFileInfo, err := os.Stat(src)
 	if err != nil {
