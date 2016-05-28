@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	//"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -20,7 +21,6 @@ const (
 var wg sync.WaitGroup
 
 func main() {
-
 	log.Println("Start file sync...")
 	startTime := time.Now()
 
@@ -40,6 +40,7 @@ func main() {
 	pathClean := strings.Replace(contents, "{", "", -1)
 	pathClean = strings.Replace(pathClean, "}", "", -1)
 	pathGroup := strings.Split(pathClean, ";")
+
 	for _, i := range pathGroup {
 		pathClean := strings.TrimSpace(i)
 		if pathClean != "" {
@@ -58,21 +59,24 @@ func main() {
 				continue
 			}
 
+			// pass variable in outer area as arguments of gorutine function
+			// in order to prevent from argument instability
+
 			wg.Add(1)
-			go func() {
+			go func(sourcePath, destinationPath string) {
 				syncFileDistribution(sourcePath, destinationPath)
 				wg.Done()
-			}()
+			}(sourcePath, destinationPath)
 
 			// sequential version
 			// syncFileDistribution(sourcePath, destinationPath)
 			// syncDestinationFile(destinationPath, sourcePath)
 
 			wg.Add(1)
-			go func() {
+			go func(destinationPath, sourcePath string) {
 				syncDestinationFile(destinationPath, sourcePath)
 				wg.Done()
-			}()
+			}(destinationPath, sourcePath)
 		}
 	}
 	wg.Wait()
@@ -116,11 +120,14 @@ func syncDestinationFile(desPath, srcPath string) {
 					// sequential version
 					// syncDestinationFile(recursiveDesPath, recursiveSrcPath)
 
+					// pass variable in outer area as arguments of gorutine function
+					// in order to prevent from argument instability
+
 					wg.Add(1)
-					go func() {
+					go func(recursiveDesPath, recursiveSrcPath string) {
 						syncDestinationFile(recursiveDesPath, recursiveSrcPath)
 						wg.Done()
-					}()
+					}(recursiveDesPath, recursiveSrcPath)
 				}
 			} else {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
@@ -167,16 +174,24 @@ func syncFileDistribution(srcPath, desPath string) {
 				// sequential version
 				// syncFileDistribution(recursiveSrcPath, recursiveDesPath)
 
+				// pass variable in outer area as arguments of gorutine function
+				// in order to prevent from argument instability
+
 				wg.Add(1)
-				go func() {
+				go func(recursiveSrcPath, recursiveDesPath string) {
 					syncFileDistribution(recursiveSrcPath, recursiveDesPath)
 					wg.Done()
-				}()
+				}(recursiveSrcPath, recursiveDesPath)
 
 			} else {
 				srcFile := filepath.Join(sourcePath, file.Name())
 				destFile := filepath.Join(destinationPath, file.Name())
-				copyFile(srcFile, destFile)
+
+				wg.Add(1)
+				go func(srcFile, destFile string) {
+					copyFile(srcFile, destFile)
+					wg.Done()
+				}(srcFile, destFile)
 			}
 		}
 	}
@@ -212,13 +227,51 @@ func copyFile(src, dst string) {
 			return
 		}
 
-		srcFileMtime := sourceFileInfo.ModTime()
-		desinationFileMtime := destFileInfo.ModTime()
-
-		if srcFileMtime.After(desinationFileMtime) {
+		if fileDiff(src, dst) {
+			//log.Printf("%s and %s are different\n", src, dst)
 			copyFileContents(src, dst)
 		}
+
+		// compare the last modified time to determin whether to perform the copy operation
+
+		//	srcFileMtime := sourceFileInfo.ModTime()
+		//	desinationFileMtime := destFileInfo.ModTime()
+
+		//	if srcFileMtime.After(desinationFileMtime) {
+		//		copyFileContents(src, dst)
+		//	}
 	}
+}
+
+func fileDiff(src, dst string) bool {
+	contentIn, err := ioutil.ReadFile(src)
+	if err != nil {
+		log.Fatalf("file read error: %s\n", src)
+	}
+
+	lenIn := len(contentIn)
+
+	contentOut, err := ioutil.ReadFile(dst)
+	if err != nil {
+		log.Fatalf("file read error: %s\n", dst)
+	}
+
+	lenOut := len(contentOut)
+
+	if lenIn != lenOut {
+		return true
+	}
+
+	for i := 0; i < lenIn; i++ {
+		cIn := contentIn[i]
+		cOut := contentOut[i]
+
+		if cIn != cOut {
+			return true
+		}
+	}
+
+	return false
 }
 
 func copyFileContents(src, dst string) {
