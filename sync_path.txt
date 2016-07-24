@@ -1,9 +1,9 @@
-{
-/home/onionhuang/programming_projects:/run/media/onionhuang/Internal_Disk/programming_projects_backup;
-/home/onionhuang/programming_projects:/run/media/onionhuang/FreeAgent GoFlex Drive/programming_projects_backup;
-/home/onionhuang/programming_projects:/run/media/onionhuang/Hitachi/programming_projects_backup;
-/home/onionhuang/Documents:/run/media/onionhuang/Hitachi/my_documents_backup;
-/home/onionhuang/Documents:/run/media/onionhuang/FreeAgent GoFlex Drive/my_documents_backup;
-/home/onionhuang/Documents:/run/media/onionhuang/Internal_Disk/my_documents_backup;
-}
-
+/home/onionhuang/programming_projects -> /run/media/onionhuang/Internal_Disk/programming_projects_backup
+/home/onionhuang/programming_projects -> /run/media/onionhuang/FreeAgent GoFlex Drive/programming_projects_backup
+/home/onionhuang/programming_projects -> /run/media/onionhuang/Hitachi/programming_projects_backup
+/home/onionhuang/Documents -> /run/media/onionhuang/Hitachi/my_documents_backup
+/home/onionhuang/Documents -> /run/media/onionhuang/FreeAgent GoFlex Drive/my_documents_backup
+/home/onionhuang/Documents -> /run/media/onionhuang/Internal_Disk/my_documents_backup
+/home/onionhuang/ctags -> /run/media/onionhuang/Internal_Disk/ctags_backup
+/home/onionhuang/ctags -> /run/media/onionhuang/FreeAgent GoFlex Drive/ctags_backup
+/home/onionhuang/ctags -> /run/media/onionhuang/Hitachi/ctags_backup

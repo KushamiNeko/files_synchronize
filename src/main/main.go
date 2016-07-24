@@ -1,84 +1,93 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	//"os/exec"
 	"path/filepath"
-	"strings"
+	"regexp"
+	"runtime"
 	"sync"
 	"time"
 )
 
 const (
-	syncPathFile string = `/home/onionhuang/programming_projects/golang/file_sync/sync_path.txt`
-	maxThreads   int    = 8
+	SYNCFILEPATH string = `/home/onionhuang/programming_projects/golang/file_sync/sync_path.txt`
 )
 
 var wg sync.WaitGroup
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	log.Println("Start file sync...")
 	startTime := time.Now()
 
-	fn, err := os.Open(syncPathFile)
+	fileContent, err := ioutil.ReadFile(SYNCFILEPATH)
 	if err != nil {
-		log.Fatalf("%q\n", "Cannot open the file!")
-	}
-	defer fn.Close()
-
-	fnReader := bufio.NewReader(fn)
-	contents, err := fnReader.ReadString('}')
-	if err != nil {
-		log.Printf("reading error: %q\n", err)
-		return
+		log.Fatalf("Cannot open the file: %q\n", SYNCFILEPATH)
 	}
 
-	pathClean := strings.Replace(contents, "{", "", -1)
-	pathClean = strings.Replace(pathClean, "}", "", -1)
-	pathGroup := strings.Split(pathClean, ";")
+	if bytes.Contains(fileContent, []byte("\ufeff")) {
+		fileContent = bytes.Replace(fileContent, []byte("\ufeff"), []byte(""), -1)
+	}
 
-	for _, i := range pathGroup {
-		pathClean := strings.TrimSpace(i)
-		if pathClean != "" {
-			pathInfo := strings.Split(pathClean, ":")
-			sourcePath := strings.TrimSpace(pathInfo[0])
-			destinationPath := strings.TrimSpace(pathInfo[1])
+	pathSplit := bytes.Split(fileContent, []byte("\n"))
 
-			if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-				log.Printf("Source path does not exist: %q\n", sourcePath)
-				continue
-			}
+	for _, i := range pathSplit {
+		path := bytes.TrimSpace(i)
 
-			if _, err := os.Stat(destinationPath); os.IsNotExist(err) {
-				log.Printf("destinationPath does not exist: %q\n",
-					destinationPath)
-				continue
-			}
-
-			// pass variable in outer area as arguments of gorutine function
-			// in order to prevent from argument instability
-
-			wg.Add(1)
-			go func(sourcePath, destinationPath string) {
-				syncFileDistribution(sourcePath, destinationPath)
-				wg.Done()
-			}(sourcePath, destinationPath)
-
-			// sequential version
-			// syncFileDistribution(sourcePath, destinationPath)
-			// syncDestinationFile(destinationPath, sourcePath)
-
-			wg.Add(1)
-			go func(destinationPath, sourcePath string) {
-				syncDestinationFile(destinationPath, sourcePath)
-				wg.Done()
-			}(destinationPath, sourcePath)
+		if len(path) == 0 {
+			continue
 		}
+
+		rePattern, err := regexp.Compile(`^(.+) -> (.+)$`)
+		if err != nil {
+			log.Fatalf("regex pattern compile failed\n")
+		}
+
+		pathMatch := rePattern.FindSubmatch(path)
+
+		srcPath := filepath.Clean(string(bytes.TrimSpace(pathMatch[1])))
+		desPath := filepath.Clean(string(bytes.TrimSpace(pathMatch[2])))
+
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			log.Printf("Source path does not exist: %q\n", srcPath)
+			continue
+		}
+
+		if _, err := os.Stat(desPath); os.IsNotExist(err) {
+			log.Printf("destinationPath does not exist: %q\n",
+				desPath)
+			continue
+		}
+
+		//	log.Println(srcPath)
+		//	log.Println(desPath)
+
+		// pass variable in outer area as arguments of gorutine function
+		// in order to prevent from argument instability
+
+		wg.Add(1)
+		go func(sourcePath, destinationPath string) {
+			syncSrcToDest(sourcePath, destinationPath)
+			wg.Done()
+		}(srcPath, desPath)
+
+		//		// sequential version
+		//		// syncFileDistribution(sourcePath, destinationPath)
+		//		// syncDestinationFile(destinationPath, sourcePath)
+
+		wg.Add(1)
+		go func(destinationPath, sourcePath string) {
+			syncDestToSrc(destinationPath, sourcePath)
+			wg.Done()
+		}(desPath, srcPath)
+
 	}
+
 	wg.Wait()
 
 	endTime := time.Now()
@@ -88,32 +97,28 @@ func main() {
 	log.Printf("Processing time: %f seconds", processTime.Seconds())
 }
 
-func syncDestinationFile(desPath, srcPath string) {
-	sourcePath := filepath.Clean(srcPath)
-	destinationPath := filepath.Clean(desPath)
+func syncDestToSrc(desPath, srcPath string) {
 
-	destFileInfo, err := os.Stat(destinationPath)
+	destFileInfo, err := os.Stat(desPath)
 	if err != nil {
-		log.Printf("Fatal error on source file: %q\n", destFileInfo.Name())
+		log.Printf("Fatal error on destination file: %q\n", destFileInfo.Name())
 		return
 	}
 
 	if destFileInfo.IsDir() {
-		destRead, err := ioutil.ReadDir(destinationPath)
+		destRead, err := ioutil.ReadDir(desPath)
 		if err != nil {
 			log.Printf(
-				"Fatal error occurs while walk through source path: %q\n",
-				filepath.Base(desPath))
+				"Fatal error occurs while walk through destination path: \n%q\n",
+				desPath)
 			return
 		}
 
 		for _, file := range destRead {
-			recursiveSrcPath := filepath.Join(sourcePath, file.Name())
-			recursiveDesPath := filepath.Join(destinationPath, file.Name())
+			recursiveSrcPath := filepath.Join(srcPath, file.Name())
+			recursiveDesPath := filepath.Join(desPath, file.Name())
 			if file.IsDir() {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
-					//	log.Printf("Directory does not exist in source: %q\n",
-					//		filepath.Join(destinationPath, file.Name()))
 					os.RemoveAll(recursiveDesPath)
 				} else {
 
@@ -125,14 +130,12 @@ func syncDestinationFile(desPath, srcPath string) {
 
 					wg.Add(1)
 					go func(recursiveDesPath, recursiveSrcPath string) {
-						syncDestinationFile(recursiveDesPath, recursiveSrcPath)
+						syncDestToSrc(recursiveDesPath, recursiveSrcPath)
 						wg.Done()
 					}(recursiveDesPath, recursiveSrcPath)
 				}
 			} else {
 				if _, err := os.Stat(recursiveSrcPath); os.IsNotExist(err) {
-					//	log.Printf("File does not exist in source: %q\n",
-					//		filepath.Join(destinationPath, file.Name()))
 					os.Remove(recursiveDesPath)
 				}
 			}
@@ -140,68 +143,65 @@ func syncDestinationFile(desPath, srcPath string) {
 	}
 }
 
-func syncFileDistribution(srcPath, desPath string) {
-	sourcePath := filepath.Clean(srcPath)
-	destinationPath := filepath.Clean(desPath)
+func syncSrcToDest(srcPath, desPath string) {
 
-	sourceFileInfo, err := os.Stat(sourcePath)
+	sourceFileInfo, err := os.Stat(srcPath)
 	if err != nil {
 		log.Printf("Fatal error on source file: %q\n", sourceFileInfo.Name())
 		return
 	}
 
 	if sourceFileInfo.IsDir() {
-		if _, err := os.Stat(destinationPath); os.IsNotExist(err) {
-			err := os.MkdirAll(destinationPath, 0777)
+		if _, err := os.Stat(desPath); os.IsNotExist(err) {
+			err := os.MkdirAll(desPath, 0777)
 			if err != nil {
-				log.Printf("Directories creation errors")
+				log.Printf("Directories creation errors: \n%q\n", desPath)
 				return
 			}
 		}
-		sourcePathRead, err := ioutil.ReadDir(sourcePath)
+
+		sourcePathRead, err := ioutil.ReadDir(srcPath)
 		if err != nil {
 			log.Printf(
-				"Fatal error occurs while walk through source path: %q\n",
-				filepath.Base(srcPath))
+				"Fatal error occurs while walk through source path: \n%q\n",
+				srcPath)
 			return
 		}
 
 		for _, file := range sourcePathRead {
 			if file.IsDir() {
-				recursiveSrcPath := filepath.Join(sourcePath, file.Name())
-				recursiveDesPath := filepath.Join(destinationPath, file.Name())
+				recursiveSrcPath := filepath.Join(srcPath, file.Name())
+				recursiveDesPath := filepath.Join(desPath, file.Name())
+
+				//log.Println(recursiveSrcPath)
+				//log.Println(recursiveDesPath)
 
 				// sequential version
-				// syncFileDistribution(recursiveSrcPath, recursiveDesPath)
+				//syncSrcToDest(recursiveSrcPath, recursiveDesPath)
 
 				// pass variable in outer area as arguments of gorutine function
 				// in order to prevent from argument instability
 
 				wg.Add(1)
 				go func(recursiveSrcPath, recursiveDesPath string) {
-					syncFileDistribution(recursiveSrcPath, recursiveDesPath)
+					syncSrcToDest(recursiveSrcPath, recursiveDesPath)
 					wg.Done()
 				}(recursiveSrcPath, recursiveDesPath)
 
 			} else {
-				srcFile := filepath.Join(sourcePath, file.Name())
-				destFile := filepath.Join(destinationPath, file.Name())
+				srcFile := filepath.Join(srcPath, file.Name())
+				destFile := filepath.Join(desPath, file.Name())
 
-				wg.Add(1)
-				go func(srcFile, destFile string) {
-					copyFile(srcFile, destFile)
-					wg.Done()
-				}(srcFile, destFile)
+				copyFile(srcFile, destFile)
 			}
 		}
 	}
 }
 
 func copyFile(src, dst string) {
-	//	log.Printf("copy source: %q\n", src)
-	//	log.Printf("copy destination: %q\n", dst)
 
-	sourceFileInfo, err := os.Stat(src)
+	//log.Printf("fileName: %q\n", src)
+	sourceFileInfo, err := os.Stat(filepath.Clean(src))
 	if err != nil {
 		log.Printf("Copying error on source file: %q\n", sourceFileInfo.Name())
 		return
@@ -227,19 +227,18 @@ func copyFile(src, dst string) {
 			return
 		}
 
-		if fileDiff(src, dst) {
-			//log.Printf("%s and %s are different\n", src, dst)
-			copyFileContents(src, dst)
-		}
-
-		// compare the last modified time to determin whether to perform the copy operation
-
-		//	srcFileMtime := sourceFileInfo.ModTime()
-		//	desinationFileMtime := destFileInfo.ModTime()
-
-		//	if srcFileMtime.After(desinationFileMtime) {
+		//	if fileDiff(src, dst) {
 		//		copyFileContents(src, dst)
 		//	}
+
+		//compare the last modified time to determin whether to perform the copy operation
+
+		srcFileMtime := sourceFileInfo.ModTime()
+		desinationFileMtime := destFileInfo.ModTime()
+
+		if srcFileMtime.After(desinationFileMtime) {
+			copyFileContents(src, dst)
+		}
 	}
 }
 
