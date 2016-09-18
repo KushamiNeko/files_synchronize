@@ -16,7 +16,7 @@
 #include <cmockery/cmockery_override.h>
 #endif
 
-#define MIN_NUM_THREADS 1
+#define MIN_NUM_THREADS 2
 #define MAX_NUM_THREADS 8
 
 #define SYNC_PATH_FILE "sync_path.txt"
@@ -233,8 +233,9 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
       REQUIRE(inSyncPath(srcFilePath));
       REQUIRE(inSyncPath(desFilePath));
 
-#pragma omp task
-      { syncSrctoDes(srcFilePath, desFilePath); }
+      //#pragma omp task
+      //{ syncSrctoDes(srcFilePath, desFilePath); }
+      syncSrctoDes(srcFilePath, desFilePath);
 
     } else {
       // if ((!desExist) || fileDiffTime(srcFilePath, desFilePath)) {
@@ -373,8 +374,9 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
-#pragma omp task
-        { syncDesToSrc(desFilePath, srcFilePath); }
+        //#pragma omp task
+        //{ syncDesToSrc(desFilePath, srcFilePath); }
+        syncDesToSrc(desFilePath, srcFilePath);
       }
     } else {
       if (!srcExist) {
@@ -403,7 +405,7 @@ int main(const int argv, const char **args) {
     diffFunc = fileDiffRefresh;
 
     omp_set_num_threads(MAX_NUM_THREADS);
-  } else if (argv == 2 && (strcmp(args[1], "copy") == 0)) {
+  } else if (argv == 2 && (strcmp(args[1], "max") == 0)) {
     printf("copy files with max threads!\n");
     omp_set_num_threads(MAX_NUM_THREADS);
   } else if (argv > 1) {
@@ -463,10 +465,13 @@ int main(const int argv, const char **args) {
       ENSURE(inSyncPath(desPath));
 
 #pragma omp task
-      { syncSrctoDes(srcPath, desPath); }
+      {
+        syncSrctoDes(srcPath, desPath);
+        syncDesToSrc(desPath, srcPath);
+      }
 
-#pragma omp task
-      { syncDesToSrc(desPath, srcPath); }
+    //#pragma omp task
+    //      { syncDesToSrc(desPath, srcPath); }
 
     // printf("srcPath:\n%s\n", srcPath);
     // printf("desPath:\n%s\n", desPath);
