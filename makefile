@@ -1,7 +1,7 @@
 ifeq ($(BUILD),debug)   
 FLAGS = -Og -Wall -g -DDEBUG 
 else
-FLAGS = -O3 -Wall -Werror -s  
+FLAGS = -O3 -Wall -Werror -s -DNDEBUG
 endif
 
 #GENERAL_HELPER = ~/programming_projects/c/general/bin

@@ -17,7 +17,7 @@
 #include <cmockery/cmockery_override.h>
 #endif
 
-#define MIN_NUM_THREADS 1
+#define MIN_NUM_THREADS 2
 #define MAX_NUM_THREADS 8
 
 #define SYNC_PATH_FILE "sync_path.txt"
@@ -185,14 +185,15 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
     ENSURE(srcFilePath != NULL);
     ENSURE(desFilePath != NULL);
 
-    GFileType fileType = g_file_info_get_file_type(file);
+    // GFileType fileType = g_file_info_get_file_type(file);
     gboolean desExist = g_file_test(desFilePath, G_FILE_TEST_EXISTS);
 
-    if (fileType == G_FILE_TYPE_DIRECTORY) {
+    // if (fileType == G_FILE_TYPE_DIRECTORY) {
+    if (g_file_test(srcFilePath, G_FILE_TEST_IS_DIR)) {
       if (!desExist) {
         REQUIRE(inSyncPath(desFilePath));
 
-        g_mkdir(desFilePath, 0777);
+        // g_mkdir(desFilePath, 0777);
         printf("make directory:\n%s\n\n", desFilePath);
       }
 
@@ -202,14 +203,16 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
       REQUIRE(inSyncPath(srcFilePath));
       REQUIRE(inSyncPath(desFilePath));
 
-      syncSrctoDes(srcFilePath, desFilePath);
+      //#pragma omp task
+      //      { syncSrctoDes(srcFilePath, desFilePath); }
 
+      syncSrctoDes(srcFilePath, desFilePath);
     } else {
       if ((!desExist) || diffFunc(srcFilePath, desFilePath)) {
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
-        copy_file(srcFilePath, desFilePath);
+        // copy_file(srcFilePath, desFilePath);
         printf("copy file:\nFrom: %s\nTo: %s\n\n", srcFilePath, desFilePath);
       }
     }
@@ -250,18 +253,19 @@ static void rmdirWithContents(const char *dir) {
     char *filePath = pathJoin(dir, fileName);
     ENSURE(filePath != NULL);
 
-    GFileType fileType = g_file_info_get_file_type(file);
+    // GFileType fileType = g_file_info_get_file_type(file);
 
-    if (fileType == G_FILE_TYPE_DIRECTORY) {
+    // if (fileType == G_FILE_TYPE_DIRECTORY) {
+    if (g_file_test(filePath, G_FILE_TEST_IS_DIR)) {
       REQUIRE(inSyncPath(filePath));
 
       rmdirWithContents(filePath);
-      g_rmdir(filePath);
+      // g_rmdir(filePath);
       printf("remove directory:\n%s\n\n", filePath);
     } else {
       REQUIRE(inSyncPath(filePath));
 
-      g_remove(filePath);
+      // g_remove(filePath);
       printf("remove file:\n%s\n\n", filePath);
     }
 
@@ -308,13 +312,14 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
     ENSURE(srcFilePath != NULL);
     ENSURE(desFilePath != NULL);
 
-    GFileType fileType = g_file_info_get_file_type(file);
+    // GFileType fileType = g_file_info_get_file_type(file);
     gboolean srcExist = g_file_test(srcFilePath, G_FILE_TEST_EXISTS);
 
-    if (fileType == G_FILE_TYPE_DIRECTORY) {
+    // if (fileType == G_FILE_TYPE_DIRECTORY) {
+    if (g_file_test(desFilePath, G_FILE_TEST_IS_DIR)) {
       if (!srcExist) {
         rmdirWithContents(desFilePath);
-        g_rmdir(desFilePath);
+        // g_rmdir(desFilePath);
         printf("remove directory:\n%s\n\n", desFilePath);
       } else {
         ENSURE(g_file_test(srcFilePath, G_FILE_TEST_EXISTS));
@@ -323,13 +328,17 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
+        //#pragma omp task
+        //        { syncDesToSrc(desFilePath, srcFilePath); }
+
         syncDesToSrc(desFilePath, srcFilePath);
       }
+
     } else {
       if (!srcExist) {
         REQUIRE(inSyncPath(desFilePath));
 
-        g_remove(desFilePath);
+        // g_remove(desFilePath);
         printf("remove file:\n%s\n\n", desFilePath);
       }
     }
@@ -413,6 +422,12 @@ int main(const int argv, const char **args) {
 #pragma omp task
       {
         syncSrctoDes(srcPath, desPath);
+        // syncDesToSrc(desPath, srcPath);
+      }
+
+#pragma omp task
+      {
+        // syncSrctoDes(srcPath, desPath);
         syncDesToSrc(desPath, srcPath);
       }
 
