@@ -10,13 +10,14 @@
 
 #include "../../general/src/general_helper.h"
 
-#include <cmockery/pbc.h>
+//#include <cmockery/pbc.h>
+#include "../../general/src/debug_macro.h"
 
 #ifdef UNIT_TESTING
 #include <cmockery/cmockery_override.h>
 #endif
 
-#define MIN_NUM_THREADS 2
+#define MIN_NUM_THREADS 1
 #define MAX_NUM_THREADS 8
 
 #define SYNC_PATH_FILE "sync_path.txt"
@@ -58,10 +59,6 @@ static gboolean inSyncPath(const char *path) {
 
     char *srcPath = g_strstrip(splitSrcDes[0]);
     char *desPath = g_strstrip(splitSrcDes[1]);
-
-    //    printf("path: %s\n", path);
-    //    printf("srcPath: %s\n", srcPath);
-    //    printf("desPath: %s\n", desPath);
 
     ENSURE(path != NULL);
 
@@ -146,29 +143,6 @@ static gboolean fileDiffRefresh(const char *src, const char *des) {
   REQUIRE(inSyncPath(des));
 
   return TRUE;
-
-  //  gboolean re = FALSE;
-  //
-  //  // printf("srcPath: %s\n", src);
-  //  // printf("desPath: %s\n", des);
-  //
-  //  char *srcContents = readFile(src);
-  //  char *desContents = readFile(des);
-  //
-  //  ENSURE(srcContents != NULL);
-  //  ENSURE(desContents != NULL);
-  //
-  //  //  printf("srcContents: \n%s\n", srcContents);
-  //  //  printf("desContents: \n%s\n", desContents);
-  //
-  //  if (strcmp(srcContents, desContents) != 0) {
-  //    re = TRUE;
-  //  }
-  //
-  //  g_free(srcContents);
-  //  g_free(desContents);
-  //
-  //  return re;
 }
 
 typedef gboolean fileDiffFunc(const char *src, const char *des);
@@ -184,9 +158,6 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
 
   REQUIRE(inSyncPath(srcPath));
   REQUIRE(inSyncPath(desPath));
-
-  //  printf("srcPath: %s\n", srcPath);
-  //  printf("desPath: %s\n", desPath);
 
   GFile *src = g_file_new_for_path(srcPath);
 
@@ -222,34 +193,19 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
         REQUIRE(inSyncPath(desFilePath));
 
         g_mkdir(desFilePath, 0777);
+        printf("make directory:\n%s\n\n", desFilePath);
       }
 
       ENSURE(g_file_test(srcFilePath, G_FILE_TEST_EXISTS));
       ENSURE(g_file_test(desFilePath, G_FILE_TEST_EXISTS));
 
-      // printf("srcFilePath: %s\n", srcFilePath);
-      // printf("desFilePath: %s\n", desFilePath);
-
       REQUIRE(inSyncPath(srcFilePath));
       REQUIRE(inSyncPath(desFilePath));
 
-      //#pragma omp task
-      //{ syncSrctoDes(srcFilePath, desFilePath); }
       syncSrctoDes(srcFilePath, desFilePath);
 
     } else {
-      // if ((!desExist) || fileDiffTime(srcFilePath, desFilePath)) {
-      //  copy_file(srcFilePath, desFilePath);
-      //}
-
-      // if ((!desExist) || fileDiffContents(srcFilePath, desFilePath)) {
-      //  copy_file(srcFilePath, desFilePath);
-      //}
-
       if ((!desExist) || diffFunc(srcFilePath, desFilePath)) {
-        // printf("srcFilePath: %s\n", srcFilePath);
-        // printf("desFilePath: %s\n", desFilePath);
-
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
@@ -257,9 +213,6 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
         printf("copy file:\nFrom: %s\nTo: %s\n\n", srcFilePath, desFilePath);
       }
     }
-
-    //  free(srcFilePath);
-    //  free(desFilePath);
 
     g_object_unref(file);
   }
@@ -304,6 +257,7 @@ static void rmdirWithContents(const char *dir) {
 
       rmdirWithContents(filePath);
       g_rmdir(filePath);
+      printf("remove directory:\n%s\n\n", filePath);
     } else {
       REQUIRE(inSyncPath(filePath));
 
@@ -328,9 +282,6 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
 
   REQUIRE(inSyncPath(srcPath));
   REQUIRE(inSyncPath(desPath));
-
-  //  printf("srcPath: %s\n", srcPath);
-  //  printf("desPath: %s\n", desPath);
 
   GFile *des = g_file_new_for_path(desPath);
 
@@ -364,18 +315,14 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
       if (!srcExist) {
         rmdirWithContents(desFilePath);
         g_rmdir(desFilePath);
+        printf("remove directory:\n%s\n\n", desFilePath);
       } else {
         ENSURE(g_file_test(srcFilePath, G_FILE_TEST_EXISTS));
         ENSURE(g_file_test(desFilePath, G_FILE_TEST_EXISTS));
 
-        // printf("srcFilePath: %s\n", srcFilePath);
-        // printf("desFilePath: %s\n", desFilePath);
-
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
-        //#pragma omp task
-        //{ syncDesToSrc(desFilePath, srcFilePath); }
         syncDesToSrc(desFilePath, srcFilePath);
       }
     } else {
@@ -386,9 +333,6 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
         printf("remove file:\n%s\n\n", desFilePath);
       }
     }
-
-    //  free(srcFilePath);
-    //  free(desFilePath);
 
     g_object_unref(file);
   }
@@ -411,14 +355,6 @@ int main(const int argv, const char **args) {
   } else if (argv > 1) {
     printf("unknow command: %s\nperforming usual operation\n", args[1]);
   }
-
-  // REQUIRE(fileDiffTime("01.txt", "02.txt"));
-  // REQUIRE(fileDiffRefresh("01.txt", "02.txt"));
-
-  // REQUIRE(!fileDiffTime("03.txt", "04.txt"));
-  // REQUIRE(!fileDiffRefresh("03.txt", "04.txt"));
-  //  // REQUIRE(inSyncPath("/home/onionhuang/programming_project/d"));
-  // return 0;
 
   GTimer *timer = g_timer_new();
   g_timer_start(timer);
@@ -458,6 +394,16 @@ int main(const int argv, const char **args) {
       ENSURE(srcPath != NULL);
       ENSURE(desPath != NULL);
 
+      if (!g_file_test(srcPath, G_FILE_TEST_EXISTS)) {
+        printf("Source Directory does not exits: %s\n", srcPath);
+        goto clean;
+      }
+
+      if (!g_file_test(desPath, G_FILE_TEST_EXISTS)) {
+        printf("Destination Directory does not exits: %s\n", desPath);
+        goto clean;
+      }
+
       ENSURE(g_file_test(srcPath, G_FILE_TEST_EXISTS));
       ENSURE(g_file_test(desPath, G_FILE_TEST_EXISTS));
 
@@ -469,12 +415,6 @@ int main(const int argv, const char **args) {
         syncSrctoDes(srcPath, desPath);
         syncDesToSrc(desPath, srcPath);
       }
-
-    //#pragma omp task
-    //      { syncDesToSrc(desPath, srcPath); }
-
-    // printf("srcPath:\n%s\n", srcPath);
-    // printf("desPath:\n%s\n", desPath);
 
     clean:
       i++;

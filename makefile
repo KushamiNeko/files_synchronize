@@ -4,7 +4,8 @@ else
 FLAGS = -O3 -Wall -Werror -s  
 endif
 
-GENERAL_HELPER = ~/programming_projects/c/general/bin
+#GENERAL_HELPER = ~/programming_projects/c/general/bin
+GENERAL_HELPER = /d/Working_File/Programming/c/general/bin
 
 bin/main :  
 	gcc $(FLAGS) -fopenmp `pkg-config --cflags glib-2.0 gio-2.0` \
