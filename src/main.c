@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <omp.h>
+//#include <omp.h>
 
 #include "../../general/src/general_helper.h"
 
@@ -17,7 +17,7 @@
 #include <cmockery/cmockery_override.h>
 #endif
 
-#define MIN_NUM_THREADS 2
+//#define MIN_NUM_THREADS 1
 #define MAX_NUM_THREADS 8
 
 #define SYNC_PATH_FILE "sync_path.txt"
@@ -32,7 +32,7 @@ static gboolean inSyncPath(const char *path) {
 
   REQUIRE(g_file_test(SYNC_PATH_FILE, G_FILE_TEST_EXISTS));
 
-  char *syncPathContents = readFile(SYNC_PATH_FILE);
+  char *syncPathContents = fileReadContents(SYNC_PATH_FILE);
 
   ENSURE(syncPathContents != NULL);
 
@@ -147,6 +147,27 @@ static gboolean fileDiffRefresh(const char *src, const char *des) {
 
 typedef gboolean fileDiffFunc(const char *src, const char *des);
 
+////////////////////////////////////////////////////////////////////////////////////
+
+static GThreadPool *mainThreadPoolSrcToDes;
+static GThreadPool *mainThreadPoolDesToSrc;
+
+struct SyncPath {
+  char *firstArg;
+  char *secondArg;
+};
+
+static struct SyncPath *syncPathNew(char *first, char *second) {
+  struct SyncPath *re =
+      DEFENSE_MALLOC(sizeof(struct SyncPath), mallocFailAbort, NULL);
+  re->firstArg = first;
+  re->secondArg = second;
+
+  return re;
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+
 static fileDiffFunc *diffFunc = fileDiffTime;
 
 static void syncSrctoDes(const char *srcPath, const char *desPath) {
@@ -185,15 +206,13 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
     ENSURE(srcFilePath != NULL);
     ENSURE(desFilePath != NULL);
 
-    // GFileType fileType = g_file_info_get_file_type(file);
     gboolean desExist = g_file_test(desFilePath, G_FILE_TEST_EXISTS);
 
-    // if (fileType == G_FILE_TYPE_DIRECTORY) {
     if (g_file_test(srcFilePath, G_FILE_TEST_IS_DIR)) {
       if (!desExist) {
         REQUIRE(inSyncPath(desFilePath));
 
-        // g_mkdir(desFilePath, 0777);
+        g_mkdir(desFilePath, 0777);
         printf("make directory:\n%s\n\n", desFilePath);
       }
 
@@ -206,13 +225,16 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
       //#pragma omp task
       //      { syncSrctoDes(srcFilePath, desFilePath); }
 
-      syncSrctoDes(srcFilePath, desFilePath);
+      struct SyncPath *pathSrcToDes = syncPathNew(srcFilePath, desFilePath);
+      g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
+
+      // syncSrctoDes(srcFilePath, desFilePath);
     } else {
       if ((!desExist) || diffFunc(srcFilePath, desFilePath)) {
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
-        // copy_file(srcFilePath, desFilePath);
+        fileCopy(srcFilePath, desFilePath);
         printf("copy file:\nFrom: %s\nTo: %s\n\n", srcFilePath, desFilePath);
       }
     }
@@ -253,19 +275,17 @@ static void rmdirWithContents(const char *dir) {
     char *filePath = pathJoin(dir, fileName);
     ENSURE(filePath != NULL);
 
-    // GFileType fileType = g_file_info_get_file_type(file);
-
-    // if (fileType == G_FILE_TYPE_DIRECTORY) {
     if (g_file_test(filePath, G_FILE_TEST_IS_DIR)) {
       REQUIRE(inSyncPath(filePath));
 
       rmdirWithContents(filePath);
-      // g_rmdir(filePath);
+      g_rmdir(filePath);
+
       printf("remove directory:\n%s\n\n", filePath);
     } else {
       REQUIRE(inSyncPath(filePath));
 
-      // g_remove(filePath);
+      g_remove(filePath);
       printf("remove file:\n%s\n\n", filePath);
     }
 
@@ -312,14 +332,12 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
     ENSURE(srcFilePath != NULL);
     ENSURE(desFilePath != NULL);
 
-    // GFileType fileType = g_file_info_get_file_type(file);
     gboolean srcExist = g_file_test(srcFilePath, G_FILE_TEST_EXISTS);
 
-    // if (fileType == G_FILE_TYPE_DIRECTORY) {
     if (g_file_test(desFilePath, G_FILE_TEST_IS_DIR)) {
       if (!srcExist) {
         rmdirWithContents(desFilePath);
-        // g_rmdir(desFilePath);
+        g_rmdir(desFilePath);
         printf("remove directory:\n%s\n\n", desFilePath);
       } else {
         ENSURE(g_file_test(srcFilePath, G_FILE_TEST_EXISTS));
@@ -331,14 +349,17 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
         //#pragma omp task
         //        { syncDesToSrc(desFilePath, srcFilePath); }
 
-        syncDesToSrc(desFilePath, srcFilePath);
+        struct SyncPath *pathDesToSrc = syncPathNew(desFilePath, srcFilePath);
+        g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
+
+        // syncDesToSrc(desFilePath, srcFilePath);
       }
 
     } else {
       if (!srcExist) {
         REQUIRE(inSyncPath(desFilePath));
 
-        // g_remove(desFilePath);
+        g_remove(desFilePath);
         printf("remove file:\n%s\n\n", desFilePath);
       }
     }
@@ -350,17 +371,52 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
   g_object_unref(des);
 }
 
+static void threadPoolSrcToDes(void *dataFromPush, void *dataFromNew) {
+  struct SyncPath *path = (struct SyncPath *)dataFromPush;
+
+  syncSrctoDes(path->firstArg, path->secondArg);
+  // syncDesToSrc(desPath, srcPath);
+
+  //  printf("firstArg: %s\n", path->firstArg);
+  //  printf("secondArg: %s\n", path->secondArg);
+  // printf("\n");
+}
+
+static void threadPoolDesToSrc(void *dataFromPush, void *dataFromNew) {
+  struct SyncPath *path = (struct SyncPath *)dataFromPush;
+
+  // syncSrctoDes(srcPath, desPath);
+  syncDesToSrc(path->firstArg, path->secondArg);
+
+  //  printf("firstArg: %s\n", path->firstArg);
+  //  printf("secondArg: %s\n", path->secondArg);
+  // printf("\n");
+}
+
 int main(const int argv, const char **args) {
-  omp_set_num_threads(MIN_NUM_THREADS);
+  GError *err;
+
+  mainThreadPoolSrcToDes =
+      g_thread_pool_new(threadPoolSrcToDes, NULL, MAX_NUM_THREADS, TRUE, &err);
+
+  mainThreadPoolDesToSrc =
+      g_thread_pool_new(threadPoolDesToSrc, NULL, MAX_NUM_THREADS, TRUE, &err);
+
+  // guint unusedThreads = g_thread_pool_get_num_unused_threads();
+  // printf("unused threads: %d\n", unusedThreads);
+
+  // exit(EXIT_SUCCESS);
+
+  // omp_set_num_threads(MIN_NUM_THREADS);
 
   if (argv == 2 && (strcmp(args[1], "refresh") == 0)) {
     printf("refresh destination files!\n");
     diffFunc = fileDiffRefresh;
 
-    omp_set_num_threads(MAX_NUM_THREADS);
-  } else if (argv == 2 && (strcmp(args[1], "max") == 0)) {
-    printf("copy files with max threads!\n");
-    omp_set_num_threads(MAX_NUM_THREADS);
+    // omp_set_num_threads(MAX_NUM_THREADS);
+    //} else if (argv == 2 && (strcmp(args[1], "max") == 0)) {
+    //  printf("copy files with max threads!\n");
+    // omp_set_num_threads(MAX_NUM_THREADS);
   } else if (argv > 1) {
     printf("unknow command: %s\nperforming usual operation\n", args[1]);
   }
@@ -370,7 +426,7 @@ int main(const int argv, const char **args) {
 
   REQUIRE(g_file_test(SYNC_PATH_FILE, G_FILE_TEST_EXISTS));
 
-  char *syncPathContents = readFile(SYNC_PATH_FILE);
+  char *syncPathContents = fileReadContents(SYNC_PATH_FILE);
 
   ENSURE(syncPathContents != NULL);
 
@@ -378,66 +434,94 @@ int main(const int argv, const char **args) {
 
   ENSURE(syncNewLineSplit != NULL);
 
-#pragma omp parallel
-  {
-    int i = 0;
-    while (1) {
-      if (syncNewLineSplit[i] == NULL) {
-        break;
-      }
-
-      ENSURE(syncNewLineSplit[i] != NULL);
-
-      char **splitSrcDes = g_strsplit(syncNewLineSplit[i], SYNC_PATH_SPLIT, 0);
-
-      if (splitSrcDes[0] == NULL || splitSrcDes[1] == NULL) {
-        goto clean;
-      }
-
-      ENSURE(splitSrcDes[0] != NULL);
-      ENSURE(splitSrcDes[1] != NULL);
-
-      char *srcPath = g_strstrip(splitSrcDes[0]);
-      char *desPath = g_strstrip(splitSrcDes[1]);
-
-      ENSURE(srcPath != NULL);
-      ENSURE(desPath != NULL);
-
-      if (!g_file_test(srcPath, G_FILE_TEST_EXISTS)) {
-        printf("Source Directory does not exits: %s\n", srcPath);
-        goto clean;
-      }
-
-      if (!g_file_test(desPath, G_FILE_TEST_EXISTS)) {
-        printf("Destination Directory does not exits: %s\n", desPath);
-        goto clean;
-      }
-
-      ENSURE(g_file_test(srcPath, G_FILE_TEST_EXISTS));
-      ENSURE(g_file_test(desPath, G_FILE_TEST_EXISTS));
-
-      ENSURE(inSyncPath(srcPath));
-      ENSURE(inSyncPath(desPath));
-
-#pragma omp task
-      {
-        syncSrctoDes(srcPath, desPath);
-        // syncDesToSrc(desPath, srcPath);
-      }
-
-#pragma omp task
-      {
-        // syncSrctoDes(srcPath, desPath);
-        syncDesToSrc(desPath, srcPath);
-      }
-
-    clean:
-      i++;
+  //#pragma omp parallel
+  //{
+  int i = 0;
+  while (1) {
+    if (syncNewLineSplit[i] == NULL) {
+      break;
     }
+
+    ENSURE(syncNewLineSplit[i] != NULL);
+
+    char **splitSrcDes = g_strsplit(syncNewLineSplit[i], SYNC_PATH_SPLIT, 0);
+
+    if (splitSrcDes[0] == NULL || splitSrcDes[1] == NULL) {
+      goto clean;
+    }
+
+    ENSURE(splitSrcDes[0] != NULL);
+    ENSURE(splitSrcDes[1] != NULL);
+
+    char *srcPath = g_strstrip(splitSrcDes[0]);
+    char *desPath = g_strstrip(splitSrcDes[1]);
+
+    ENSURE(srcPath != NULL);
+    ENSURE(desPath != NULL);
+
+    if (!g_file_test(srcPath, G_FILE_TEST_EXISTS)) {
+      printf("Source Directory does not exits: %s\n", srcPath);
+      goto clean;
+    }
+
+    if (!g_file_test(desPath, G_FILE_TEST_EXISTS)) {
+      printf("Destination Directory does not exits: %s\n", desPath);
+      goto clean;
+    }
+
+    ENSURE(g_file_test(srcPath, G_FILE_TEST_EXISTS));
+    ENSURE(g_file_test(desPath, G_FILE_TEST_EXISTS));
+
+    ENSURE(inSyncPath(srcPath));
+    ENSURE(inSyncPath(desPath));
+
+    struct SyncPath *pathSrcToDes = syncPathNew(srcPath, desPath);
+    g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
+
+    struct SyncPath *pathDesToSrc = syncPathNew(desPath, srcPath);
+    g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
+
+  //#pragma omp task
+  //{
+  // syncSrctoDes(srcPath, desPath);
+  // syncDesToSrc(desPath, srcPath);
+  //}
+
+  //#pragma omp task
+  //{
+  // syncSrctoDes(srcPath, desPath);
+  // syncDesToSrc(desPath, srcPath);
+  //}
+
+  clean:
+    i++;
   }
+  //}
 
   g_strfreev(syncNewLineSplit);
   free(syncPathContents);
+
+  guint taskSrcToDes;
+  guint taskDesToSrc;
+
+  while (true) {
+    taskSrcToDes = g_thread_pool_unprocessed(mainThreadPoolSrcToDes);
+    taskDesToSrc = g_thread_pool_unprocessed(mainThreadPoolDesToSrc);
+
+    if (taskSrcToDes == 0 && taskDesToSrc == 0) {
+      break;
+    }
+  }
+
+  taskSrcToDes = g_thread_pool_unprocessed(mainThreadPoolSrcToDes);
+  taskDesToSrc = g_thread_pool_unprocessed(mainThreadPoolDesToSrc);
+
+  ENSURE(taskSrcToDes == 0);
+
+  // g_thread_pool_free(mainThreadPoolSrcToDes, FALSE, TRUE);
+
+  ENSURE(taskDesToSrc == 0);
+  // g_thread_pool_free(mainThreadPoolDesToSrc, FALSE, TRUE);
 
   g_timer_stop(timer);
   double executionTime = g_timer_elapsed(timer, NULL);
@@ -445,6 +529,12 @@ int main(const int argv, const char **args) {
   printf("execution time: %f seconds\n", executionTime);
 
   g_timer_destroy(timer);
+
+  taskSrcToDes = g_thread_pool_unprocessed(mainThreadPoolSrcToDes);
+  taskDesToSrc = g_thread_pool_unprocessed(mainThreadPoolDesToSrc);
+
+  ENSURE(taskSrcToDes == 0);
+  ENSURE(taskDesToSrc == 0);
 
   //  syncSrctoDes(srcPath, desPath);
   //  syncDesToSrc(desPath, srcPath);

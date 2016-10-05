@@ -4,14 +4,14 @@ else
 FLAGS = -O3 -Wall -Werror -s -DNDEBUG
 endif
 
-#GENERAL_HELPER = ~/programming_projects/c/general/bin
-GENERAL_HELPER = /d/Working_File/Programming/c/general/bin
+GENERAL_HELPER = ~/programming_projects/c/general/bin
 
 bin/main :  
-	gcc $(FLAGS) -fopenmp `pkg-config --cflags glib-2.0 gio-2.0` \
+	#gcc $(FLAGS) -fopenmp `pkg-config --cflags glib-2.0 gio-2.0` 
+	gcc $(FLAGS) `pkg-config --cflags glib-2.0 gio-2.0` \
 -o bin/main \
 $(GENERAL_HELPER)/general_helper \
-src/main.c -lm `pkg-config --libs glib-2.0 gio-2.0`
+src/main.c `pkg-config --libs glib-2.0 gio-2.0`
 
 clean:
 	@if [ $(shell find 'bin' -type d -empty)  ]; then\
