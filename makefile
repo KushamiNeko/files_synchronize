@@ -6,20 +6,16 @@ endif
 
 GENERAL_HELPER = ~/programming_projects/c/general/bin
 
+PKG_CONFIG_LIBS = glib-2.0 gio-2.0
+
 bin/main :  
-	#gcc $(FLAGS) -fopenmp `pkg-config --cflags glib-2.0 gio-2.0` 
-	gcc $(FLAGS) `pkg-config --cflags glib-2.0 gio-2.0` \
+	gcc $(FLAGS) `pkg-config --cflags $(PKG_CONFIG_LIBS)` \
 -o bin/main \
 $(GENERAL_HELPER)/general_helper \
-src/main.c `pkg-config --libs glib-2.0 gio-2.0`
+src/main.c `pkg-config --libs $(PKG_CONFIG_LIBS)`
 
 clean:
-	@if [ $(shell find 'bin' -type d -empty)  ]; then\
-		echo 'bin is already clean';\
-	else\
-		echo 'cleaning bin ...';\
-		rm -r bin/*;\
-	fi
+	rm -f bin/*
 
 release:
 	make clean
