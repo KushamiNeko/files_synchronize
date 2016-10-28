@@ -6,18 +6,14 @@
 #include <stdio.h>
 #include <string.h>
 
-//#include <omp.h>
-
 #include "../../general/src/general_helper.h"
 
-//#include <cmockery/pbc.h>
 #include "../../general/src/debug_macro.h"
 
 #ifdef UNIT_TESTING
 #include <cmockery/cmockery_override.h>
 #endif
 
-//#define MIN_NUM_THREADS 1
 #define MAX_NUM_THREADS 8
 
 #define SYNC_PATH_FILE "sync_path.txt"
@@ -222,9 +218,6 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
       REQUIRE(inSyncPath(srcFilePath));
       REQUIRE(inSyncPath(desFilePath));
 
-      //#pragma omp task
-      //      { syncSrctoDes(srcFilePath, desFilePath); }
-
       struct SyncPath *pathSrcToDes = syncPathNew(srcFilePath, desFilePath);
       g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
 
@@ -346,9 +339,6 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
         REQUIRE(inSyncPath(srcFilePath));
         REQUIRE(inSyncPath(desFilePath));
 
-        //#pragma omp task
-        //        { syncDesToSrc(desFilePath, srcFilePath); }
-
         struct SyncPath *pathDesToSrc = syncPathNew(desFilePath, srcFilePath);
         g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
 
@@ -375,22 +365,16 @@ static void threadPoolSrcToDes(void *dataFromPush, void *dataFromNew) {
   struct SyncPath *path = (struct SyncPath *)dataFromPush;
 
   syncSrctoDes(path->firstArg, path->secondArg);
-  // syncDesToSrc(desPath, srcPath);
 
-  //  printf("firstArg: %s\n", path->firstArg);
-  //  printf("secondArg: %s\n", path->secondArg);
-  // printf("\n");
+  // syncDesToSrc(desPath, srcPath);
 }
 
 static void threadPoolDesToSrc(void *dataFromPush, void *dataFromNew) {
   struct SyncPath *path = (struct SyncPath *)dataFromPush;
 
   // syncSrctoDes(srcPath, desPath);
-  syncDesToSrc(path->firstArg, path->secondArg);
 
-  //  printf("firstArg: %s\n", path->firstArg);
-  //  printf("secondArg: %s\n", path->secondArg);
-  // printf("\n");
+  syncDesToSrc(path->firstArg, path->secondArg);
 }
 
 int main(const int argv, const char **args) {
@@ -402,21 +386,12 @@ int main(const int argv, const char **args) {
   mainThreadPoolDesToSrc =
       g_thread_pool_new(threadPoolDesToSrc, NULL, MAX_NUM_THREADS, TRUE, &err);
 
-  // guint unusedThreads = g_thread_pool_get_num_unused_threads();
-  // printf("unused threads: %d\n", unusedThreads);
-
   // exit(EXIT_SUCCESS);
-
-  // omp_set_num_threads(MIN_NUM_THREADS);
 
   if (argv == 2 && (strcmp(args[1], "refresh") == 0)) {
     printf("refresh destination files!\n");
     diffFunc = fileDiffRefresh;
 
-    // omp_set_num_threads(MAX_NUM_THREADS);
-    //} else if (argv == 2 && (strcmp(args[1], "max") == 0)) {
-    //  printf("copy files with max threads!\n");
-    // omp_set_num_threads(MAX_NUM_THREADS);
   } else if (argv > 1) {
     printf("unknow command: %s\nperforming usual operation\n", args[1]);
   }
@@ -434,8 +409,6 @@ int main(const int argv, const char **args) {
 
   ENSURE(syncNewLineSplit != NULL);
 
-  //#pragma omp parallel
-  //{
   int i = 0;
   while (1) {
     if (syncNewLineSplit[i] == NULL) {
@@ -481,22 +454,9 @@ int main(const int argv, const char **args) {
     struct SyncPath *pathDesToSrc = syncPathNew(desPath, srcPath);
     g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
 
-  //#pragma omp task
-  //{
-  // syncSrctoDes(srcPath, desPath);
-  // syncDesToSrc(desPath, srcPath);
-  //}
-
-  //#pragma omp task
-  //{
-  // syncSrctoDes(srcPath, desPath);
-  // syncDesToSrc(desPath, srcPath);
-  //}
-
   clean:
     i++;
   }
-  //}
 
   g_strfreev(syncNewLineSplit);
   free(syncPathContents);
