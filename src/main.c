@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <unistd.h>
+
 #include "../../general/src/general_helper.h"
 
 #include "../../general/src/debug_macro.h"
@@ -17,6 +19,8 @@
 #define MAX_NUM_THREADS 8
 
 #define SYNC_PATH_FILE "sync_path.txt"
+//#define SYNC_PATH_FILE
+//"/home/onionhuang/programming_projects/c/file_sync/sync_path.txt"
 
 #define NEW_LINE_CHAR "\n"
 #define SYNC_PATH_SPLIT "->"
@@ -148,6 +152,12 @@ typedef gboolean fileDiffFunc(const char *src, const char *des);
 static GThreadPool *mainThreadPoolSrcToDes;
 static GThreadPool *mainThreadPoolDesToSrc;
 
+static int srcToDesCount = 0;
+static int desToSrcCount = 0;
+
+G_LOCK_DEFINE(srcToDesCount);
+G_LOCK_DEFINE(desToSrcCount);
+
 struct SyncPath {
   char *firstArg;
   char *secondArg;
@@ -219,6 +229,7 @@ static void syncSrctoDes(const char *srcPath, const char *desPath) {
       REQUIRE(inSyncPath(desFilePath));
 
       struct SyncPath *pathSrcToDes = syncPathNew(srcFilePath, desFilePath);
+
       g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
 
       // syncSrctoDes(srcFilePath, desFilePath);
@@ -340,6 +351,7 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
         REQUIRE(inSyncPath(desFilePath));
 
         struct SyncPath *pathDesToSrc = syncPathNew(desFilePath, srcFilePath);
+
         g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
 
         // syncDesToSrc(desFilePath, srcFilePath);
@@ -364,17 +376,31 @@ static void syncDesToSrc(const char *desPath, const char *srcPath) {
 static void threadPoolSrcToDes(void *dataFromPush, void *dataFromNew) {
   struct SyncPath *path = (struct SyncPath *)dataFromPush;
 
-  syncSrctoDes(path->firstArg, path->secondArg);
+  G_LOCK(srcToDesCount);
+  srcToDesCount++;
+  G_UNLOCK(srcToDesCount);
 
+  syncSrctoDes(path->firstArg, path->secondArg);
   // syncDesToSrc(desPath, srcPath);
+
+  G_LOCK(srcToDesCount);
+  srcToDesCount--;
+  G_UNLOCK(srcToDesCount);
 }
 
 static void threadPoolDesToSrc(void *dataFromPush, void *dataFromNew) {
   struct SyncPath *path = (struct SyncPath *)dataFromPush;
 
-  // syncSrctoDes(srcPath, desPath);
+  G_LOCK(desToSrcCount);
+  desToSrcCount++;
+  G_UNLOCK(desToSrcCount);
 
   syncDesToSrc(path->firstArg, path->secondArg);
+  // syncSrctoDes(srcPath, desPath);
+
+  G_LOCK(desToSrcCount);
+  desToSrcCount--;
+  G_UNLOCK(desToSrcCount);
 }
 
 int main(const int argv, const char **args) {
@@ -449,9 +475,11 @@ int main(const int argv, const char **args) {
     ENSURE(inSyncPath(desPath));
 
     struct SyncPath *pathSrcToDes = syncPathNew(srcPath, desPath);
+
     g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
 
     struct SyncPath *pathDesToSrc = syncPathNew(desPath, srcPath);
+
     g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
 
   clean:
@@ -461,27 +489,39 @@ int main(const int argv, const char **args) {
   g_strfreev(syncNewLineSplit);
   free(syncPathContents);
 
-  guint taskSrcToDes;
-  guint taskDesToSrc;
+  g_thread_yield();
 
   while (true) {
-    taskSrcToDes = g_thread_pool_unprocessed(mainThreadPoolSrcToDes);
-    taskDesToSrc = g_thread_pool_unprocessed(mainThreadPoolDesToSrc);
+    G_LOCK(srcToDesCount);
+    G_LOCK(desToSrcCount);
 
-    if (taskSrcToDes == 0 && taskDesToSrc == 0) {
+    if (srcToDesCount == 0 && desToSrcCount == 0) {
+      G_UNLOCK(srcToDesCount);
+      G_UNLOCK(desToSrcCount);
+
       break;
     }
+
+    G_UNLOCK(srcToDesCount);
+    G_UNLOCK(desToSrcCount);
+
+    // sleep(3);
   }
 
-  taskSrcToDes = g_thread_pool_unprocessed(mainThreadPoolSrcToDes);
-  taskDesToSrc = g_thread_pool_unprocessed(mainThreadPoolDesToSrc);
+  G_LOCK(srcToDesCount);
+  G_LOCK(desToSrcCount);
 
-  ENSURE(taskSrcToDes == 0);
+  printf("Src To Des Remain Count: %d\n", srcToDesCount);
+  printf("Des To Src Remain Count: %d\n", desToSrcCount);
 
-  // g_thread_pool_free(mainThreadPoolSrcToDes, FALSE, TRUE);
+  ENSURE(srcToDesCount == 0);
+  ENSURE(desToSrcCount == 0);
 
-  ENSURE(taskDesToSrc == 0);
-  // g_thread_pool_free(mainThreadPoolDesToSrc, FALSE, TRUE);
+  G_UNLOCK(srcToDesCount);
+  G_UNLOCK(desToSrcCount);
+
+  g_thread_pool_free(mainThreadPoolSrcToDes, FALSE, TRUE);
+  g_thread_pool_free(mainThreadPoolDesToSrc, FALSE, TRUE);
 
   g_timer_stop(timer);
   double executionTime = g_timer_elapsed(timer, NULL);
@@ -489,12 +529,6 @@ int main(const int argv, const char **args) {
   printf("execution time: %f seconds\n", executionTime);
 
   g_timer_destroy(timer);
-
-  taskSrcToDes = g_thread_pool_unprocessed(mainThreadPoolSrcToDes);
-  taskDesToSrc = g_thread_pool_unprocessed(mainThreadPoolDesToSrc);
-
-  ENSURE(taskSrcToDes == 0);
-  ENSURE(taskDesToSrc == 0);
 
   //  syncSrctoDes(srcPath, desPath);
   //  syncDesToSrc(desPath, srcPath);

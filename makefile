@@ -6,10 +6,12 @@ endif
 
 GENERAL_HELPER = ~/programming_projects/c/general/bin
 
+COMPILER = gcc
+
 PKG_CONFIG_LIBS = glib-2.0 gio-2.0
 
 bin/main :  
-	gcc $(FLAGS) `pkg-config --cflags $(PKG_CONFIG_LIBS)` \
+	$(COMPILER) $(FLAGS) `pkg-config --cflags $(PKG_CONFIG_LIBS)` \
 -o bin/main \
 $(GENERAL_HELPER)/general_helper \
 src/main.c `pkg-config --libs $(PKG_CONFIG_LIBS)`
