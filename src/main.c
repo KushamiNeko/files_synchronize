@@ -28,18 +28,17 @@
 
 #ifdef DEBUG
 
-static gboolean inSyncPath(const char* path)
-{
+static gboolean inSyncPath(const char *path) {
   gboolean re = FALSE;
 
   ENSURE_MSG(g_file_test(SYNC_PATH_FILE, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", SYNC_PATH_FILE);
+             "FilePath does not exist: %s\n", SYNC_PATH_FILE);
 
-  char* syncPathContents = fileReadContents(SYNC_PATH_FILE);
+  char *syncPathContents = fileReadContents(SYNC_PATH_FILE);
 
   ENSURE(syncPathContents != NULL);
 
-  char** syncNewLineSplit = g_strsplit(syncPathContents, NEW_LINE_CHAR, 0);
+  char **syncNewLineSplit = g_strsplit(syncPathContents, NEW_LINE_CHAR, 0);
 
   ENSURE(syncNewLineSplit != NULL);
 
@@ -51,7 +50,7 @@ static gboolean inSyncPath(const char* path)
 
     ENSURE(syncNewLineSplit[i] != NULL);
 
-    char** splitSrcDes = g_strsplit(syncNewLineSplit[i], SYNC_PATH_SPLIT, 0);
+    char **splitSrcDes = g_strsplit(syncNewLineSplit[i], SYNC_PATH_SPLIT, 0);
 
     if (splitSrcDes[0] == NULL || splitSrcDes[1] == NULL) {
       goto clean;
@@ -60,8 +59,8 @@ static gboolean inSyncPath(const char* path)
     ENSURE(splitSrcDes[0] != NULL);
     ENSURE(splitSrcDes[1] != NULL);
 
-    char* srcPath = g_strstrip(splitSrcDes[0]);
-    char* desPath = g_strstrip(splitSrcDes[1]);
+    char *srcPath = g_strstrip(splitSrcDes[0]);
+    char *desPath = g_strstrip(splitSrcDes[1]);
 
     ENSURE(path != NULL);
 
@@ -69,11 +68,12 @@ static gboolean inSyncPath(const char* path)
     ENSURE(desPath != NULL);
 
     ENSURE_MSG(g_file_test(srcPath, G_FILE_TEST_EXISTS),
-        "FilePath does not exist: %s\n", srcPath);
+               "FilePath does not exist: %s\n", srcPath);
     ENSURE_MSG(g_file_test(desPath, G_FILE_TEST_EXISTS),
-        "FilePath does not exist: %s\n", desPath);
+               "FilePath does not exist: %s\n", desPath);
 
-    if (g_str_match_string(srcPath, path, TRUE) || g_str_match_string(desPath, path, TRUE)) {
+    if (g_str_match_string(srcPath, path, TRUE) ||
+        g_str_match_string(desPath, path, TRUE)) {
       re = TRUE;
       break;
     }
@@ -87,35 +87,36 @@ static gboolean inSyncPath(const char* path)
 
 #endif
 
-static gboolean fileDiffTime(const char* src, const char* des)
-{
+static gboolean fileDiffTime(const char *src, const char *des) {
   ENSURE(src != NULL);
   ENSURE(des != NULL);
 
   ENSURE_MSG(g_file_test(src, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", src);
+             "FilePath does not exist: %s\n", src);
   ENSURE_MSG(g_file_test(des, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", des);
+             "FilePath does not exist: %s\n", des);
 
   ENSURE_MSG(inSyncPath(src), "FilePath does not locate in the SyncPath: %s\n",
-      src);
+             src);
   ENSURE_MSG(inSyncPath(des), "FilePath does not locate in the SyncPath: %s\n",
-      des);
+             des);
 
   gboolean re = FALSE;
 
-  GError* err = NULL;
+  GError *err = NULL;
 
-  GFile* srcFile = g_file_new_for_path(src);
-  GFile* desFile = g_file_new_for_path(des);
+  GFile *srcFile = g_file_new_for_path(src);
+  GFile *desFile = g_file_new_for_path(des);
 
-  GFileInfo* srcFileInfo = g_file_query_info(srcFile, G_FILE_ATTRIBUTE_TIME_MODIFIED,
-      G_FILE_QUERY_INFO_NONE, NULL, &err);
+  GFileInfo *srcFileInfo =
+      g_file_query_info(srcFile, G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                        G_FILE_QUERY_INFO_NONE, NULL, &err);
 
   ENSURE(err == NULL);
 
-  GFileInfo* desFileInfo = g_file_query_info(desFile, G_FILE_ATTRIBUTE_TIME_MODIFIED,
-      G_FILE_QUERY_INFO_NONE, NULL, &err);
+  GFileInfo *desFileInfo =
+      g_file_query_info(desFile, G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                        G_FILE_QUERY_INFO_NONE, NULL, &err);
 
   ENSURE(err == NULL);
 
@@ -139,30 +140,29 @@ static gboolean fileDiffTime(const char* src, const char* des)
   return re;
 }
 
-static gboolean fileDiffRefresh(const char* src, const char* des)
-{
+static gboolean fileDiffRefresh(const char *src, const char *des) {
   ENSURE(src != NULL);
   ENSURE(des != NULL);
 
   ENSURE_MSG(g_file_test(src, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", src);
+             "FilePath does not exist: %s\n", src);
   ENSURE_MSG(g_file_test(des, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", des);
+             "FilePath does not exist: %s\n", des);
 
   ENSURE_MSG(inSyncPath(src), "FilePath does not locate in the SyncPath: %s\n",
-      src);
+             src);
   ENSURE_MSG(inSyncPath(des), "FilePath does not locate in the SyncPath: %s\n",
-      des);
+             des);
 
   return TRUE;
 }
 
-typedef gboolean fileDiffFunc(const char* src, const char* des);
+typedef gboolean fileDiffFunc(const char *src, const char *des);
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-static GThreadPool* mainThreadPoolSrcToDes;
-static GThreadPool* mainThreadPoolDesToSrc;
+static GThreadPool *mainThreadPoolSrcToDes;
+static GThreadPool *mainThreadPoolDesToSrc;
 
 static int srcToDesCount = 0;
 static int desToSrcCount = 0;
@@ -171,13 +171,13 @@ G_LOCK_DEFINE(srcToDesCount);
 G_LOCK_DEFINE(desToSrcCount);
 
 struct SyncPath {
-  char* firstArg;
-  char* secondArg;
+  char *firstArg;
+  char *secondArg;
 };
 
-static struct SyncPath* syncPathNew(char* first, char* second)
-{
-  struct SyncPath* re = DEFENSE_MALLOC(sizeof(struct SyncPath), mallocFailAbort, NULL);
+static struct SyncPath *syncPathNew(char *first, char *second) {
+  struct SyncPath *re =
+      DEFENSE_MALLOC(sizeof(struct SyncPath), mallocFailAbort, NULL);
   re->firstArg = first;
   re->secondArg = second;
 
@@ -186,45 +186,44 @@ static struct SyncPath* syncPathNew(char* first, char* second)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-static fileDiffFunc* diffFunc = fileDiffTime;
+static fileDiffFunc *diffFunc = fileDiffTime;
 
-static void syncSrctoDes(const char* srcPath, const char* desPath)
-{
+static void syncSrctoDes(const char *srcPath, const char *desPath) {
   ENSURE(srcPath != NULL);
   ENSURE(desPath != NULL);
 
   ENSURE_MSG(g_file_test(srcPath, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", srcPath);
+             "FilePath does not exist: %s\n", srcPath);
   ENSURE_MSG(g_file_test(desPath, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", desPath);
+             "FilePath does not exist: %s\n", desPath);
 
   ENSURE_MSG(inSyncPath(srcPath),
-      "FilePath does not locate in the SyncPath: %s\n", srcPath);
+             "FilePath does not locate in the SyncPath: %s\n", srcPath);
   ENSURE_MSG(inSyncPath(desPath),
-      "FilePath does not locate in the SyncPath: %s\n", desPath);
+             "FilePath does not locate in the SyncPath: %s\n", desPath);
 
-  GFile* src = g_file_new_for_path(srcPath);
+  GFile *src = g_file_new_for_path(srcPath);
 
-  GError* err = NULL;
-  GFileEnumerator* srcEnum = g_file_enumerate_children(
+  GError *err = NULL;
+  GFileEnumerator *srcEnum = g_file_enumerate_children(
       src, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &err);
 
   ENSURE(err == NULL);
 
   while (1) {
-    GFileInfo* file = g_file_enumerator_next_file(srcEnum, NULL, &err);
+    GFileInfo *file = g_file_enumerator_next_file(srcEnum, NULL, &err);
     if (file == NULL) {
       break;
     }
 
     ENSURE(file != NULL);
 
-    const char* fileName = g_file_info_get_name(file);
+    const char *fileName = g_file_info_get_name(file);
 
     ENSURE(fileName != NULL);
 
-    char* srcFilePath = pathJoin(srcPath, fileName);
-    char* desFilePath = pathJoin(desPath, fileName);
+    char *srcFilePath = pathJoin(srcPath, fileName);
+    char *desFilePath = pathJoin(desPath, fileName);
 
     ENSURE(srcFilePath != NULL);
     ENSURE(desFilePath != NULL);
@@ -240,16 +239,16 @@ static void syncSrctoDes(const char* srcPath, const char* desPath)
       }
 
       ENSURE_MSG(g_file_test(srcFilePath, G_FILE_TEST_EXISTS),
-          "FilePath does not exist: %s\n", srcFilePath);
+                 "FilePath does not exist: %s\n", srcFilePath);
       ENSURE_MSG(g_file_test(desFilePath, G_FILE_TEST_EXISTS),
-          "FilePath does not exist: %s\n", desFilePath);
+                 "FilePath does not exist: %s\n", desFilePath);
 
       ENSURE_MSG(inSyncPath(srcFilePath),
-          "FilePath does not locate in the SyncPath: %s\n", srcFilePath);
+                 "FilePath does not locate in the SyncPath: %s\n", srcFilePath);
       ENSURE_MSG(inSyncPath(desFilePath),
-          "FilePath does not locate in the SyncPath: %s\n", desFilePath);
+                 "FilePath does not locate in the SyncPath: %s\n", desFilePath);
 
-      struct SyncPath* pathSrcToDes = syncPathNew(srcFilePath, desFilePath);
+      struct SyncPath *pathSrcToDes = syncPathNew(srcFilePath, desFilePath);
 
       g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
 
@@ -258,11 +257,11 @@ static void syncSrctoDes(const char* srcPath, const char* desPath)
     } else {
       if ((!desExist) || diffFunc(srcFilePath, desFilePath)) {
         ENSURE_MSG(inSyncPath(srcFilePath),
-            "FilePath does not locate in the SyncPath: %s\n",
-            srcFilePath);
+                   "FilePath does not locate in the SyncPath: %s\n",
+                   srcFilePath);
         ENSURE_MSG(inSyncPath(desFilePath),
-            "FilePath does not locate in the SyncPath: %s\n",
-            desFilePath);
+                   "FilePath does not locate in the SyncPath: %s\n",
+                   desFilePath);
 
         fileCopy(srcFilePath, desFilePath);
         printf("copy file:\nFrom: %s\nTo: %s\n\n", srcFilePath, desFilePath);
@@ -276,41 +275,41 @@ static void syncSrctoDes(const char* srcPath, const char* desPath)
   g_object_unref(src);
 }
 
-static void rmdirWithContents(const char* dir)
-{
+static void rmdirWithContents(const char *dir) {
   ENSURE(dir != NULL);
 
   ENSURE_MSG(g_file_test(dir, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", dir);
+             "FilePath does not exist: %s\n", dir);
 
   ENSURE_MSG(inSyncPath(dir), "FilePath does not locate in the SyncPath: %s\n",
-      dir);
+             dir);
 
-  GFile* dirFile = g_file_new_for_path(dir);
+  GFile *dirFile = g_file_new_for_path(dir);
 
-  GError* err = NULL;
-  GFileEnumerator* dirEnum = g_file_enumerate_children(dirFile, G_FILE_ATTRIBUTE_STANDARD_NAME,
-      G_FILE_QUERY_INFO_NONE, NULL, &err);
+  GError *err = NULL;
+  GFileEnumerator *dirEnum =
+      g_file_enumerate_children(dirFile, G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                G_FILE_QUERY_INFO_NONE, NULL, &err);
 
   ENSURE(err == NULL);
 
   while (1) {
-    GFileInfo* file = g_file_enumerator_next_file(dirEnum, NULL, &err);
+    GFileInfo *file = g_file_enumerator_next_file(dirEnum, NULL, &err);
     if (file == NULL) {
       break;
     }
 
     ENSURE(file != NULL);
 
-    const char* fileName = g_file_info_get_name(file);
+    const char *fileName = g_file_info_get_name(file);
     ENSURE(fileName != NULL);
 
-    char* filePath = pathJoin(dir, fileName);
+    char *filePath = pathJoin(dir, fileName);
     ENSURE(filePath != NULL);
 
     if (g_file_test(filePath, G_FILE_TEST_IS_DIR)) {
       ENSURE_MSG(inSyncPath(filePath),
-          "FilePath does not locate in the SyncPath: %s\n", filePath);
+                 "FilePath does not locate in the SyncPath: %s\n", filePath);
 
       rmdirWithContents(filePath);
       g_rmdir(filePath);
@@ -318,7 +317,7 @@ static void rmdirWithContents(const char* dir)
       printf("remove directory:\n%s\n\n", filePath);
     } else {
       ENSURE_MSG(inSyncPath(filePath),
-          "FilePath does not locate in the SyncPath: %s\n", filePath);
+                 "FilePath does not locate in the SyncPath: %s\n", filePath);
 
       g_remove(filePath);
       printf("remove file:\n%s\n\n", filePath);
@@ -332,42 +331,41 @@ static void rmdirWithContents(const char* dir)
   g_object_unref(dirFile);
 }
 
-static void syncDesToSrc(const char* desPath, const char* srcPath)
-{
+static void syncDesToSrc(const char *desPath, const char *srcPath) {
   ENSURE(srcPath != NULL);
   ENSURE(desPath != NULL);
 
   ENSURE_MSG(g_file_test(srcPath, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", srcPath);
+             "FilePath does not exist: %s\n", srcPath);
   ENSURE_MSG(g_file_test(desPath, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", desPath);
+             "FilePath does not exist: %s\n", desPath);
 
   ENSURE_MSG(inSyncPath(srcPath),
-      "FilePath does not locate in the SyncPath: %s\n", srcPath);
+             "FilePath does not locate in the SyncPath: %s\n", srcPath);
   ENSURE_MSG(inSyncPath(desPath),
-      "FilePath does not locate in the SyncPath: %s\n", desPath);
+             "FilePath does not locate in the SyncPath: %s\n", desPath);
 
-  GFile* des = g_file_new_for_path(desPath);
+  GFile *des = g_file_new_for_path(desPath);
 
-  GError* err = NULL;
-  GFileEnumerator* desEnum = g_file_enumerate_children(
+  GError *err = NULL;
+  GFileEnumerator *desEnum = g_file_enumerate_children(
       des, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &err);
 
   ENSURE(err == NULL);
 
   while (1) {
-    GFileInfo* file = g_file_enumerator_next_file(desEnum, NULL, &err);
+    GFileInfo *file = g_file_enumerator_next_file(desEnum, NULL, &err);
     if (file == NULL) {
       break;
     }
 
     ENSURE(file != NULL);
 
-    const char* fileName = g_file_info_get_name(file);
+    const char *fileName = g_file_info_get_name(file);
     ENSURE(fileName != NULL);
 
-    char* desFilePath = pathJoin(desPath, fileName);
-    char* srcFilePath = pathJoin(srcPath, fileName);
+    char *desFilePath = pathJoin(desPath, fileName);
+    char *srcFilePath = pathJoin(srcPath, fileName);
 
     ENSURE(srcFilePath != NULL);
     ENSURE(desFilePath != NULL);
@@ -381,18 +379,18 @@ static void syncDesToSrc(const char* desPath, const char* srcPath)
         printf("remove directory:\n%s\n\n", desFilePath);
       } else {
         ENSURE_MSG(g_file_test(srcFilePath, G_FILE_TEST_EXISTS),
-            "FilePath does not exist: %s\n", srcFilePath);
+                   "FilePath does not exist: %s\n", srcFilePath);
         ENSURE_MSG(g_file_test(desFilePath, G_FILE_TEST_EXISTS),
-            "FilePath does not exist: %s\n", desFilePath);
+                   "FilePath does not exist: %s\n", desFilePath);
 
         ENSURE_MSG(inSyncPath(srcFilePath),
-            "FilePath does not locate in the SyncPath: %s\n",
-            srcFilePath);
+                   "FilePath does not locate in the SyncPath: %s\n",
+                   srcFilePath);
         ENSURE_MSG(inSyncPath(desFilePath),
-            "FilePath does not locate in the SyncPath: %s\n",
-            desFilePath);
+                   "FilePath does not locate in the SyncPath: %s\n",
+                   desFilePath);
 
-        struct SyncPath* pathDesToSrc = syncPathNew(desFilePath, srcFilePath);
+        struct SyncPath *pathDesToSrc = syncPathNew(desFilePath, srcFilePath);
 
         g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
 
@@ -402,8 +400,8 @@ static void syncDesToSrc(const char* desPath, const char* srcPath)
     } else {
       if (!srcExist) {
         ENSURE_MSG(inSyncPath(desFilePath),
-            "FilePath does not locate in the SyncPath: %s\n",
-            desFilePath);
+                   "FilePath does not locate in the SyncPath: %s\n",
+                   desFilePath);
 
         g_remove(desFilePath);
         printf("remove file:\n%s\n\n", desFilePath);
@@ -417,9 +415,8 @@ static void syncDesToSrc(const char* desPath, const char* srcPath)
   g_object_unref(des);
 }
 
-static void threadPoolSrcToDes(void* dataFromPush, void* dataFromNew)
-{
-  struct SyncPath* path = (struct SyncPath*)dataFromPush;
+static void threadPoolSrcToDes(void *dataFromPush, void *dataFromNew) {
+  struct SyncPath *path = (struct SyncPath *)dataFromPush;
 
   G_LOCK(srcToDesCount);
   srcToDesCount++;
@@ -434,9 +431,8 @@ static void threadPoolSrcToDes(void* dataFromPush, void* dataFromNew)
   G_UNLOCK(srcToDesCount);
 }
 
-static void threadPoolDesToSrc(void* dataFromPush, void* dataFromNew)
-{
-  struct SyncPath* path = (struct SyncPath*)dataFromPush;
+static void threadPoolDesToSrc(void *dataFromPush, void *dataFromNew) {
+  struct SyncPath *path = (struct SyncPath *)dataFromPush;
 
   G_LOCK(desToSrcCount);
   desToSrcCount++;
@@ -451,13 +447,14 @@ static void threadPoolDesToSrc(void* dataFromPush, void* dataFromNew)
   G_UNLOCK(desToSrcCount);
 }
 
-int main(const int argv, const char** args)
-{
-  GError* err;
+int main(const int argv, const char **args) {
+  GError *err;
 
-  mainThreadPoolSrcToDes = g_thread_pool_new(threadPoolSrcToDes, NULL, MAX_NUM_THREADS, TRUE, &err);
+  mainThreadPoolSrcToDes =
+      g_thread_pool_new(threadPoolSrcToDes, NULL, MAX_NUM_THREADS, TRUE, &err);
 
-  mainThreadPoolDesToSrc = g_thread_pool_new(threadPoolDesToSrc, NULL, MAX_NUM_THREADS, TRUE, &err);
+  mainThreadPoolDesToSrc =
+      g_thread_pool_new(threadPoolDesToSrc, NULL, MAX_NUM_THREADS, TRUE, &err);
 
   // exit(EXIT_SUCCESS);
 
@@ -469,17 +466,17 @@ int main(const int argv, const char** args)
     printf("unknow command: %s\nperforming usual operation\n", args[1]);
   }
 
-  GTimer* timer = g_timer_new();
+  GTimer *timer = g_timer_new();
   g_timer_start(timer);
 
   ENSURE_MSG(g_file_test(SYNC_PATH_FILE, G_FILE_TEST_EXISTS),
-      "FilePath does not exist: %s\n", SYNC_PATH_FILE);
+             "FilePath does not exist: %s\n", SYNC_PATH_FILE);
 
-  char* syncPathContents = fileReadContents(SYNC_PATH_FILE);
+  char *syncPathContents = fileReadContents(SYNC_PATH_FILE);
 
   ENSURE(syncPathContents != NULL);
 
-  char** syncNewLineSplit = g_strsplit(syncPathContents, NEW_LINE_CHAR, 0);
+  char **syncNewLineSplit = g_strsplit(syncPathContents, NEW_LINE_CHAR, 0);
 
   ENSURE(syncNewLineSplit != NULL);
 
@@ -491,7 +488,7 @@ int main(const int argv, const char** args)
 
     ENSURE(syncNewLineSplit[i] != NULL);
 
-    char** splitSrcDes = g_strsplit(syncNewLineSplit[i], SYNC_PATH_SPLIT, 0);
+    char **splitSrcDes = g_strsplit(syncNewLineSplit[i], SYNC_PATH_SPLIT, 0);
 
     if (splitSrcDes[0] == NULL || splitSrcDes[1] == NULL) {
       goto clean;
@@ -500,8 +497,8 @@ int main(const int argv, const char** args)
     ENSURE(splitSrcDes[0] != NULL);
     ENSURE(splitSrcDes[1] != NULL);
 
-    char* srcPath = g_strstrip(splitSrcDes[0]);
-    char* desPath = g_strstrip(splitSrcDes[1]);
+    char *srcPath = g_strstrip(splitSrcDes[0]);
+    char *desPath = g_strstrip(splitSrcDes[1]);
 
     ENSURE(srcPath != NULL);
     ENSURE(desPath != NULL);
@@ -517,20 +514,20 @@ int main(const int argv, const char** args)
     }
 
     ENSURE_MSG(g_file_test(srcPath, G_FILE_TEST_EXISTS),
-        "FilePath does not exist: %s\n", srcPath);
+               "FilePath does not exist: %s\n", srcPath);
     ENSURE_MSG(g_file_test(desPath, G_FILE_TEST_EXISTS),
-        "FilePath does not exist: %s\n", desPath);
+               "FilePath does not exist: %s\n", desPath);
 
     ENSURE_MSG(inSyncPath(srcPath),
-        "FilePath does not locate in the SyncPath: %s\n", srcPath);
+               "FilePath does not locate in the SyncPath: %s\n", srcPath);
     ENSURE_MSG(inSyncPath(desPath),
-        "FilePath does not locate in the SyncPath: %s\n", desPath);
+               "FilePath does not locate in the SyncPath: %s\n", desPath);
 
-    struct SyncPath* pathSrcToDes = syncPathNew(srcPath, desPath);
+    struct SyncPath *pathSrcToDes = syncPathNew(srcPath, desPath);
 
     g_thread_pool_push(mainThreadPoolSrcToDes, pathSrcToDes, &err);
 
-    struct SyncPath* pathDesToSrc = syncPathNew(desPath, srcPath);
+    struct SyncPath *pathDesToSrc = syncPathNew(desPath, srcPath);
 
     g_thread_pool_push(mainThreadPoolDesToSrc, pathDesToSrc, &err);
 
